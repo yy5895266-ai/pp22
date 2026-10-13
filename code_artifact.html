@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>喵喵食堂 - 智能貓咪餵食器控制面板</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for Statistics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts: Noto Sans TC & Fredoka -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            400: '#fb923c',
+                            500: '#f97316',
+                            600: '#ea580c',
+                        },
+                        cat: {
+                            pink: '#f472b6',
+                            purple: '#c084fc',
+                            accent: '#38bdf8'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Noto Sans TC', 'sans-serif'],
+                        rounded: ['Fredoka', 'cursive']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc;
+        }
+        .font-rounded {
+            font-family: 'Fredoka', cursive;
+        }
+        /* Custom animations */
+        @keyframes kibbleDrop {
+            0% { transform: translateY(-20px) scale(0.5); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(60px) scale(1.2); opacity: 0; }
+        }
+        .kibble-anim {
+            animation: kibbleDrop 0.8s ease-in forward;
+        }
+        /* Pulse for Live Camera Indicator */
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.1); }
+        }
+        .live-dot {
+            animation: pulseGlow 1.5s infinite ease-in-out;
+        }
+        /* Glassmorphism utility */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col pb-10">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-orange-100 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-orange-400 to-amber-300 flex items-center justify-center text-white shadow-md shadow-orange-200">
+                    <i class="fa-solid fa-cat text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-rounded font-bold text-xl text-slate-800 tracking-wide flex items-center">
+                        MeowFeeder <span class="ml-2 text-xs font-normal bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-sans">Pro v2.4</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">智能遠端寵物照顧系統</p>
+                </div>
+            </div>
+
+            <!-- 貓咪切換與裝置狀態 -->
+            <div class="flex items-center space-x-4">
+                <!-- 裝置狀態標籤 -->
+                <div class="hidden md:flex items-center space-x-3 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 text-xs">
+                    <span class="flex items-center text-emerald-600 font-medium">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-ping"></span>
+                        已連線
+                    </span>
+                    <span class="text-slate-300">|</span>
+                    <span class="text-slate-500"><i class="fa-solid fa-wifi text-slate-400 mr-1"></i> 5G_Home</span>
+                    <span class="text-slate-300">|</span>
+                    <span class="text-slate-500"><i class="fa-solid fa-battery-three-quarters text-emerald-500 mr-1"></i> 85%</span>
+                </div>
+
+                <!-- 寵物選擇 Profiles -->
+                <div class="flex items-center space-x-2 bg-orange-50 hover:bg-orange-100/70 transition p-1.5 rounded-2xl cursor-pointer border border-orange-200/60">
+                    <img src="https://placehold.co/100x100/fb923c/ffffff?text=Mimi" alt="Cat Profile" class="w-8 h-8 rounded-xl object-cover">
+                    <div class="pr-2 text-left">
+                        <p class="text-xs font-bold text-slate-700 leading-tight">咪咪 (Mimi)</p>
+                        <p class="text-[10px] text-orange-500 font-medium">成貓 · 4.2 kg</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主內容區域 -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 flex-grow w-full">
+        <!-- Toast 通知訊息框 -->
+        <div id="toast" class="fixed top-20 right-5 z-50 transform translate-x-full transition-all duration-300 opacity-0 bg-slate-800 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center space-x-3 border border-slate-700">
+            <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+            <span id="toast-msg" class="text-sm font-medium">操作成功</span>
+        </div>
+
+        <!-- 頂部狀態卡片集 -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <!-- 儲糧槽狀態 -->
+            <div class="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400">主糧儲存量</p>
+                        <h3 class="text-2xl font-bold text-slate-800 mt-1 font-rounded">68 <span class="text-sm font-normal text-slate-500">%</span></h3>
+                    </div>
+                    <div class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-bowl-food"></i>
+                    </div>
+                </div>
+                <!-- 進度條 -->
+                <div class="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+                    <div class="bg-amber-400 h-2 rounded-full" style="width: 68%;"></div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-2 flex justify-between">
+                    <span>約剩餘 850g</span>
+                    <span class="text-amber-600 font-medium">充足</span>
+                </p>
+            </div>
+
+            <!-- 出糧次數統計 -->
+            <div class="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400">今日已餵食</p>
+                        <h3 class="text-2xl font-bold text-slate-800 mt-1 font-rounded">3 <span class="text-sm font-normal text-slate-500">次 / 45g</span></h3>
+                    </div>
+                    <div class="w-10 h-10 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-utensils"></i>
+                    </div>
+                </div>
+                <div class="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+                    <div class="bg-orange-500 h-2 rounded-full" style="width: 75%;"></div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-2 flex justify-between">
+                    <span>目標: 60g / 日</span>
+                    <span class="text-orange-500 font-medium">進度 75%</span>
+                </p>
+            </div>
+
+            <!-- 水量狀態 (若有智慧水機功能) -->
+            <div class="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400">飲水機餘量</p>
+                        <h3 class="text-2xl font-bold text-slate-800 mt-1 font-rounded">82 <span class="text-sm font-normal text-slate-500">%</span></h3>
+                    </div>
+                    <div class="w-10 h-10 rounded-2xl bg-sky-50 text-sky-500 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-droplet"></i>
+                    </div>
+                </div>
+                <div class="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+                    <div class="bg-sky-400 h-2 rounded-full" style="width: 82%;"></div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-2 flex justify-between">
+                    <span>濾芯剩餘 18 天</span>
+                    <span class="text-sky-600 font-medium">正常水質</span>
+                </p>
+            </div>
+
+            <!-- 下次預定餵食 -->
+            <div class="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400">下次定時出糧</p>
+                        <h3 class="text-2xl font-bold text-slate-800 mt-1 font-rounded">18:30</h3>
+                    </div>
+                    <div class="w-10 h-10 rounded-2xl bg-purple-50 text-purple-500 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-clock"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-500 space-x-1">
+                    <span class="px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 font-medium text-[10px]">晚餐</span>
+                    <span>預計發放 15 克</span>
+                </div>
+                <p class="text-[11px] text-purple-500 font-medium mt-2">
+                    <i class="fa-regular fa-hourglass-half mr-1"></i>倒數 3 小時 20 分鐘
+                </p>
+            </div>
+        </div>
+
+        <!-- 主要功能分頁/網格格狀區域 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- 左側與中間：即時監控 + 快速餵食控制 (占 2 欄) -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- 1. 貓咪即時鏡頭視訊框 -->
+                <div class="bg-slate-900 rounded-3xl overflow-hidden shadow-lg border border-slate-800 relative group">
+                    <!-- 模擬鏡頭畫面容器 -->
+                    <div class="relative aspect-video bg-slate-950 flex items-center justify-center overflow-hidden">
+                        <!-- 模擬背景影像/圖片 -->
+                        <img id="camera-feed" src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=1000&q=80" alt="Cat Camera Feed" class="w-full h-full object-cover opacity-90 transition duration-500 group-hover:scale-105">
+                        
+                        <!-- 動態貓咪餵食覆蓋特效 (出糧時觸發) -->
+                        <div id="feeding-overlay" class="absolute inset-0 bg-black/40 flex flex-col items-center justify-center space-y-2 opacity-0 pointer-events-none transition duration-300">
+                            <div class="w-16 h-16 rounded-full bg-orange-500/80 flex items-center justify-center text-white text-2xl animate-bounce">
+                                <i class="fa-solid fa-bowl-food"></i>
+                            </div>
+                            <p class="text-white font-bold text-lg tracking-wider">正在出糧中...</p>
+                        </div>
+
+                        <!-- 鏡頭 UI 蓋層：頂部標籤 -->
+                        <div class="absolute top-4 left-4 right-4 flex justify-between items-center pointer-events-none">
+                            <div class="flex items-center space-x-2 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                                <span class="w-2.5 h-2.5 rounded-full bg-red-500 live-dot"></span>
+                                <span class="text-xs font-semibold text-white uppercase tracking-wider">LIVE HD 1080P</span>
+                            </div>
+                            <div class="text-xs font-mono text-white/80 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full">
+                                <span id="current-time-display">15:10:42</span>
+                            </div>
+                        </div>
+
+                        <!-- 鏡頭 UI 蓋層：底部快捷功能（夜視、拍照、語音對講） -->
+                        <div class="absolute bottom-4 left-4 right-4 flex justify-between items-center bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 rounded-2xl">
+                            <div class="flex items-center space-x-2">
+                                <button onclick="toggleNightVision()" id="btn-night" class="w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 text-white flex items-center justify-center backdrop-blur-md transition text-xs" title="夜視模式">
+                                    <i class="fa-solid fa-moon"></i>
+                                </button>
+                                <button onclick="takeSnapshot()" class="w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 text-white flex items-center justify-center backdrop-blur-md transition text-xs" title="截圖拍照">
+                                    <i class="fa-solid fa-camera"></i>
+                                </button>
+                            </div>
+
+                            <!-- 語音按鈕 (長按/點擊模擬通話) -->
+                            <button id="mic-btn" onclick="toggleMic()" class="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold flex items-center space-x-2 shadow-lg transition">
+                                <i class="fa-solid fa-microphone"></i>
+                                <span id="mic-text">開啟對講</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 手動即時餵食控制卡片 -->
+                <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-800 flex items-center">
+                                <i class="fa-solid fa-hand-holding-heart text-orange-500 mr-2"></i>即時手動餵食
+                            </h2>
+                            <p class="text-xs text-slate-400">點擊選擇出糧克數，遠端立即餵食貓咪</p>
+                        </div>
+                        <span class="text-xs text-slate-400 font-mono">馬達狀態: <span class="text-emerald-500 font-bold">待命</span></span>
+                    </div>
+
+                    <!-- 出糧份數/克數選擇 -->
+                    <div class="grid grid-cols-4 gap-3 mb-5">
+                        <button onclick="selectPortion(5, this)" class="portion-btn active border-2 border-orange-500 bg-orange-50 text-orange-600 rounded-2xl py-3 text-center transition font-semibold hover:border-orange-500">
+                            <span class="block text-lg font-rounded">5g</span>
+                            <span class="text-[10px] opacity-80">小點心 (1份)</span>
+                        </button>
+                        <button onclick="selectPortion(10, this)" class="portion-btn border-2 border-slate-100 bg-slate-50 text-slate-600 rounded-2xl py-3 text-center transition font-semibold hover:border-orange-300">
+                            <span class="block text-lg font-rounded">10g</span>
+                            <span class="text-[10px] opacity-80">標準份 (2份)</span>
+                        </button>
+                        <button onclick="selectPortion(15, this)" class="portion-btn border-2 border-slate-100 bg-slate-50 text-slate-600 rounded-2xl py-3 text-center transition font-semibold hover:border-orange-300">
+                            <span class="block text-lg font-rounded">15g</span>
+                            <span class="text-[10px] opacity-80">正餐份 (3份)</span>
+                        </button>
+                        <button onclick="selectPortion(20, this)" class="portion-btn border-2 border-slate-100 bg-slate-50 text-slate-600 rounded-2xl py-3 text-center transition font-semibold hover:border-orange-300">
+                            <span class="block text-lg font-rounded">20g</span>
+                            <span class="text-[10px] opacity-80">大碗飽 (4份)</span>
+                        </button>
+                    </div>
+
+                    <!-- 餵食控制按鈕與語音提示選擇 -->
+                    <div class="flex flex-col sm:flex-row items-center gap-3">
+                        <div class="w-full sm:w-auto flex-1 flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-2xl">
+                            <i class="fa-solid fa-volume-high text-slate-400 text-sm"></i>
+                            <select id="audio-prompt" class="bg-transparent text-xs text-slate-700 font-medium focus:outline-none w-full">
+                                <option value="bell">餵食音效：叮咚鈴聲</option>
+                                <option value="voice1">語音：咪咪～吃飯飯囉！</option>
+                                <option value="voice2">語音：快點來吃好吃的乾乾</option>
+                                <option value="none">靜音出糧</option>
+                            </select>
+                        </div>
+
+                        <button onclick="triggerFeed()" id="feed-btn" class="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-2xl shadow-lg shadow-orange-200 hover:shadow-orange-300 transition active:scale-95 flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-bone text-lg"></i>
+                            <span>立即出糧 (<span id="selected-gram">5</span>g)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. 飲食數據與歷史紀錄圖表 -->
+                <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-800">本週進食統計</h2>
+                            <p class="text-xs text-slate-400">近 7 天每日出糧與進食總重紀錄 (克)</p>
+                        </div>
+                        <div class="flex space-x-1 bg-slate-100 p-1 rounded-xl text-xs font-medium">
+                            <button class="px-3 py-1 rounded-lg bg-white shadow-sm text-slate-700">週統計</button>
+                            <button class="px-3 py-1 rounded-lg text-slate-400 hover:text-slate-600">月統計</button>
+                        </div>
+                    </div>
+                    <!-- Chart Canvas -->
+                    <div class="w-full h-56">
+                        <canvas id="feedingChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 右側欄：定時餵食計畫 + 今日進食日誌 (占 1 欄) -->
+            <div class="space-y-6">
+                
+                <!-- 1. 自動餵食定時時間表 -->
+                <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-800 flex items-center">
+                                <i class="fa-solid fa-calendar-days text-orange-500 mr-2"></i>定時餵食計畫
+                            </h2>
+                            <p class="text-xs text-slate-400">每日規律自動出糧設定</p>
+                        </div>
+                        <button onclick="openAddScheduleModal()" class="w-8 h-8 rounded-full bg-orange-50 hover:bg-orange-100 text-orange-600 flex items-center justify-center transition">
+                            <i class="fa-solid fa-plus text-sm"></i>
+                        </button>
+                    </div>
+
+                    <!-- 計畫列表 -->
+                    <div id="schedule-list" class="space-y-3">
+                        <!-- 計畫卡片 1 -->
+                        <div class="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-sm font-bold">
+                                    早
+                                </div>
+                                <div>
+                                    <p class="font-rounded font-bold text-slate-800">07:30</p>
+                                    <p class="text-[11px] text-slate-400">早餐 · 15g (3份)</p>
+                                </div>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer" checked>
+                                <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                            </label>
+                        </div>
+
+                        <!-- 計畫卡片 2 -->
+                        <div class="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-9 h-9 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center text-sm font-bold">
+                                    午
+                                </div>
+                                <div>
+                                    <p class="font-rounded font-bold text-slate-800">12:30</p>
+                                    <p class="text-[11px] text-slate-400">午餐點心 · 10g (2份)</p>
+                                </div>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer" checked>
+                                <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                            </label>
+                        </div>
+
+                        <!-- 計畫卡片 3 -->
+                        <div class="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-9 h-9 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-sm font-bold">
+                                    晚
+                                </div>
+                                <div>
+                                    <p class="font-rounded font-bold text-slate-800">18:30</p>
+                                    <p class="text-[11px] text-slate-400">晚餐 · 15g (3份)</p>
+                                </div>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer" checked>
+                                <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                            </label>
+                        </div>
+
+                        <!-- 計畫卡片 4 -->
+                        <div class="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-bold">
+                                    宵
+                                </div>
+                                <div>
+                                    <p class="font-rounded font-bold text-slate-800">22:30</p>
+                                    <p class="text-[11px] text-slate-400">宵夜點心 · 5g (1份)</p>
+                                </div>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer">
+                                <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 今日即時出糧紀錄清單 -->
+                <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold text-slate-800">今日出糧日誌</h2>
+                        <span class="text-xs text-slate-400">即時更新</span>
+                    </div>
+
+                    <div id="feeding-logs" class="space-y-3 relative before:absolute before:inset-0 before:left-4 before:w-0.5 before:bg-slate-100">
+                        <!-- 日誌條目 1 -->
+                        <div class="relative pl-7 flex justify-between items-start text-xs">
+                            <span class="absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-white bg-emerald-500 shadow-sm"></span>
+                            <div>
+                                <p class="font-semibold text-slate-700">午餐定時出糧</p>
+                                <p class="text-[10px] text-slate-400">自動計畫 · 馬達運轉正常</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-slate-800">10g</span>
+                                <p class="text-[10px] text-slate-400">12:30</p>
+                            </div>
+                        </div>
+
+                        <!-- 日誌條目 2 -->
+                        <div class="relative pl-7 flex justify-between items-start text-xs">
+                            <span class="absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-white bg-orange-400 shadow-sm"></span>
+                            <div>
+                                <p class="font-semibold text-slate-700">手動點心獎勵</p>
+                                <p class="text-[10px] text-slate-400">來自 App 手動按鈕</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-slate-800">5g</span>
+                                <p class="text-[10px] text-slate-400">10:15</p>
+                            </div>
+                        </div>
+
+                        <!-- 日誌條目 3 -->
+                        <div class="relative pl-7 flex justify-between items-start text-xs">
+                            <span class="absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-white bg-emerald-500 shadow-sm"></span>
+                            <div>
+                                <p class="font-semibold text-slate-700">早餐定時出糧</p>
+                                <p class="text-[10px] text-slate-400">自動計畫 · 貓咪於 07:32 食用</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-slate-800">15g</span>
+                                <p class="text-[10px] text-slate-400">07:30</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. 健康貓咪提示小卡片 -->
+                <div class="bg-gradient-to-br from-orange-400 to-amber-500 rounded-3xl p-5 text-white shadow-md relative overflow-hidden">
+                    <i class="fa-solid fa-paw absolute -right-3 -bottom-3 text-7xl opacity-20 transform -rotate-12"></i>
+                    <div class="relative z-10">
+                        <div class="flex items-center space-x-2 text-xs font-semibold bg-white/20 w-max px-2.5 py-1 rounded-lg backdrop-blur-sm mb-2">
+                            <i class="fa-solid fa-lightbulb text-amber-200"></i>
+                            <span>寵物營養小貼士</span>
+                        </div>
+                        <p class="text-sm font-bold">成貓每日水份需求計算</p>
+                        <p class="text-xs text-orange-100 mt-1 leading-relaxed">
+                            咪咪體重約 4.2kg，每日建議飲水量為 170-210ml。請確保飲水機濾芯定期更換，保持新鮮水質！
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- 新增定時計畫 Modal 彈窗 -->
+    <div id="schedule-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-md mx-4 shadow-2xl border border-slate-100 transform scale-95 transition-transform duration-200" id="modal-card">
+            <div class="flex justify-between items-center mb-5">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                    <i class="fa-solid fa-clock text-orange-500 mr-2"></i>新增定時餵食
+                </h3>
+                <button onclick="closeAddScheduleModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form onsubmit="saveNewSchedule(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">喂食時間</label>
+                    <input type="time" id="new-time" required value="15:00" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-slate-800 font-rounded text-lg focus:outline-none focus:border-orange-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">標籤名稱</label>
+                    <input type="text" id="new-label" placeholder="例如：午後點心" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-orange-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">出糧份數 (每份約 5 克)</label>
+                    <select id="new-portion" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-orange-500">
+                        <option value="5">1 份 (5g)</option>
+                        <option value="10" selected>2 份 (10g)</option>
+                        <option value="15">3 份 (15g)</option>
+                        <option value="20">4 份 (20g)</option>
+                    </select>
+                </div>
+
+                <div class="pt-2 flex space-x-3">
+                    <button type="button" onclick="closeAddScheduleModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition">取消</button>
+                    <button type="submit" class="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold shadow-md shadow-orange-200 transition">儲存定時</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        let selectedGram = 5;
+        let isNightVision = false;
+        let isMicActive = false;
+
+        // 更新當前時間顯示
+        function updateClock() {
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            const clockEl = document.getElementById('current-time-display');
+            if (clockEl) clockEl.innerText = timeStr;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // 選擇手動餵食克數
+        function selectPortion(gram, btnElement) {
+            selectedGram = gram;
+            document.getElementById('selected-gram').innerText = gram;
+            
+            // 更新 UI 樣式
+            document.querySelectorAll('.portion-btn').forEach(btn => {
+                btn.classList.remove('border-orange-500', 'bg-orange-50', 'text-orange-600');
+                btn.classList.add('border-slate-100', 'bg-slate-50', 'text-slate-600');
+            });
+
+            btnElement.classList.remove('border-slate-100', 'bg-slate-50', 'text-slate-600');
+            btnElement.classList.add('border-orange-500', 'bg-orange-50', 'text-orange-600');
+        }
+
+        // 觸發手動出糧
+        function triggerFeed() {
+            const feedBtn = document.getElementById('feed-btn');
+            const overlay = document.getElementById('feeding-overlay');
+            const audioType = document.getElementById('audio-prompt').value;
+
+            // 禁用按鈕防重複連擊
+            feedBtn.disabled = true;
+            feedBtn.classList.add('opacity-75', 'cursor-not-allowed');
+
+            // 顯示畫面出糧覆蓋效果
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+
+            // 模擬語音或音效播放
+            if (audioType !== 'none') {
+                playAudioEffect();
+            }
+
+            // Toast 提示
+            showToast(`已向餵食器發送指令：發放 ${selectedGram}g 貓糧！`, 'success');
+
+            // 2.5 秒後完成出糧
+            setTimeout(() => {
+                overlay.classList.add('opacity-0', 'pointer-events-none');
+                feedBtn.disabled = false;
+                feedBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+
+                // 新增一筆記錄至日誌
+                addLogEntry('手動即時餵食', `${selectedGram}g`);
+            }, 2500);
+        }
+
+        // 模擬音效效果 (Web Audio API)
+        function playAudioEffect() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+                osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3); // A5
+
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            } catch (e) {
+                console.log('Audio playback not supported');
+            }
+        }
+
+        // 新增日誌條目
+        function addLogEntry(title, amount) {
+            const logsContainer = document.getElementById('feeding-logs');
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            const newLog = document.createElement('div');
+            newLog.className = "relative pl-7 flex justify-between items-start text-xs animate-fade-in";
+            newLog.innerHTML = `
+                <span class="absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-white bg-orange-500 shadow-sm"></span>
+                <div>
+                    <p class="font-semibold text-slate-700">${title}</p>
+                    <p class="text-[10px] text-slate-400">剛才 · 馬達順暢</p>
+                </div>
+                <div class="text-right">
+                    <span class="font-bold text-slate-800">${amount}</span>
+                    <p class="text-[10px] text-slate-400">${timeStr}</p>
+                </div>
+            `;
+
+            logsContainer.insertBefore(newLog, logsContainer.firstChild);
+        }
+
+        // 夜視功能切換
+        function toggleNightVision() {
+            isNightVision = !isNightVision;
+            const img = document.getElementById('camera-feed');
+            const btn = document.getElementById('btn-night');
+
+            if (isNightVision) {
+                img.style.filter = 'grayscale(100%) contrast(120%) brightness(110%)';
+                btn.classList.add('bg-emerald-500', 'text-white');
+                showToast('已開啟夜視增強模式', 'info');
+            } else {
+                img.style.filter = 'none';
+                btn.classList.remove('bg-emerald-500');
+                showToast('已關閉夜視模式', 'info');
+            }
+        }
+
+        // 語音通話切換
+        function toggleMic() {
+            isMicActive = !isMicActive;
+            const micBtn = document.getElementById('mic-btn');
+            const micText = document.getElementById('mic-text');
+
+            if (isMicActive) {
+                micBtn.classList.remove('bg-orange-500');
+                micBtn.classList.add('bg-red-500', 'animate-pulse');
+                micText.innerText = '正在對講... (點擊關閉)';
+                showToast('已開啟麥克風，貓咪可聽到您的聲音', 'info');
+            } else {
+                micBtn.classList.remove('bg-red-500', 'animate-pulse');
+                micBtn.classList.add('bg-orange-500');
+                micText.innerText = '開啟對講';
+                showToast('已關閉麥克風', 'info');
+            }
+        }
+
+        // 模擬拍照截圖
+        function takeSnapshot() {
+            showToast('已成功截圖並儲存至相簿！', 'success');
+        }
+
+        // 定時計畫 Modal 控制
+        function openAddScheduleModal() {
+            const modal = document.getElementById('schedule-modal');
+            const card = document.getElementById('modal-card');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                card.classList.remove('scale-95');
+                card.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeAddScheduleModal() {
+            const modal = document.getElementById('schedule-modal');
+            const card = document.getElementById('modal-card');
+            modal.classList.add('opacity-0');
+            card.classList.remove('scale-100');
+            card.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        function saveNewSchedule(e) {
+            e.preventDefault();
+            const time = document.getElementById('new-time').value;
+            const label = document.getElementById('new-label').value;
+            const portion = document.getElementById('new-portion').value;
+
+            const list = document.getElementById('schedule-list');
+            const newCard = document.createElement('div');
+            newCard.className = "p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center justify-between";
+            newCard.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-sm font-bold">
+                        定
+                    </div>
+                    <div>
+                        <p class="font-rounded font-bold text-slate-800">${time}</p>
+                        <p class="text-[11px] text-slate-400">${label} · ${portion}g</p>
+                    </div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" checked>
+                    <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+            `;
+            list.appendChild(newCard);
+            closeAddScheduleModal();
+            showToast('已新增自動餵食計畫！', 'success');
+        }
+
+        // Toast 訊息彈窗邏輯
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-msg');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMsg.innerText = msg;
+            
+            if (type === 'success') {
+                toastIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-lg';
+            } else {
+                toastIcon.className = 'fa-solid fa-circle-info text-sky-400 text-lg';
+            }
+
+            toast.classList.remove('translate-x-full', 'opacity-0');
+
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+            }, 3000);
+        }
+
+        // 渲染 Chart.js 統計圖表
+        window.onload = function() {
+            const ctx = document.getElementById('feedingChart').getContext('2d');
+            
+            // 建立漸層背景
+            const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+            gradient.addColorStop(0, 'rgba(249, 115, 22, 0.3)');
+            gradient.addColorStop(1, 'rgba(249, 115, 22, 0.0)');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['週一', '週二', '週三', '週四', '週五', '週六', '週日'],
+                    datasets: [{
+                        label: '進食總量 (g)',
+                        data: [40, 45, 50, 42, 48, 55, 45],
+                        borderColor: '#f97316',
+                        borderWidth: 3,
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#ea580c',
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: '#1e293b',
+                            padding: 10,
+                            cornerRadius: 12,
+                            displayColors: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 11
+                                },
+                                color: '#94a3b8'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: '#f1f5f9'
+                            },
+                            ticks: {
+                                font: {
+                                    size: 11
+                                },
+                                color: '#94a3b8'
+                            },
+                            min: 0,
+                            max: 70
+                        }
+                    }
+                }
+            });
+        };
+    </script>
+</body>
+</html>
